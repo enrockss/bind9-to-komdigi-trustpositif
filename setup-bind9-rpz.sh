@@ -66,26 +66,14 @@ if [ "$TOTAL_RAM_GB" -lt 12 ]; then
     [[ "$yn" =~ ^[Yy]$ ]] || exit 1
 fi
 
-# ---------- 2. Stop resolver lain ----------
-msg "2/9 Cek resolver lain di port 53"
-
-for svc in unbound dnsmasq systemd-resolved; do
-    if systemctl is-active --quiet "$svc" 2>/dev/null; then
-        echo "Menemukan $svc aktif di port 53 — menghentikan."
-        systemctl stop "$svc"
-        systemctl disable "$svc" || true
-    fi
-done
-
-# ---------- 3. Install paket ----------
-msg "3/9 Install BIND9"
+# ---------- 2. Install paket ----------
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y bind9 bind9-utils bind9-dnsutils curl
 
-# ---------- 4. Siapkan direktori ----------
-msg "4/9 Siapkan direktori kerja"
+# ---------- 3. Siapkan direktori ----------
+msg "3/9 Siapkan direktori kerja"
 
 mkdir -p "$WORKDIR"
 chown -R bind:bind "$BINDDIR"
@@ -95,8 +83,8 @@ if [ "$ENABLE_RPZ_LOG" -eq 1 ]; then
     chown bind:bind /var/log/named
 fi
 
-# ---------- 5. Install script update ----------
-msg "5/9 Install script update RPZ"
+# ---------- 4. Install script update ----------
+msg "4/9 Install script update RPZ"
 
 cat > "${WORKDIR}/update-rpz.sh" << UPDATESCRIPT
 #!/bin/bash
@@ -185,8 +173,8 @@ UPDATESCRIPT
 
 chmod +x "${WORKDIR}/update-rpz.sh"
 
-# ---------- 6. Generate zone pertama kali ----------
-msg "6/9 Download dan generate zone RPZ (butuh beberapa menit)"
+# ---------- 5. Generate zone pertama kali ----------
+msg "5/9 Download dan generate zone RPZ (butuh beberapa menit)"
 
 "${WORKDIR}/update-rpz.sh" || true
 
@@ -198,8 +186,8 @@ fi
 
 chown bind:bind "${BINDDIR}/db.rpz.trustpositif.raw"
 
-# ---------- 7. Tulis konfigurasi BIND ----------
-msg "7/9 Tulis konfigurasi BIND9"
+# ---------- 6. Tulis konfigurasi BIND ----------
+msg "6/9 Tulis konfigurasi BIND9"
 
 for f in /etc/bind/named.conf.options /etc/bind/named.conf.local; do
     [ -f "$f" ] && cp "$f" "${f}.bak.$(date +%Y%m%d%H%M%S)"
@@ -271,14 +259,29 @@ touch "${BINDDIR}/stats"
 chown bind:bind "${BINDDIR}/stats"
 chmod 664 "${BINDDIR}/stats"
 
-# ---------- 8. Validasi dan start ----------
+# ---------- 8. Validasi, stop resolver lain, start named ----------
 msg "8/9 Validasi konfigurasi"
 
-named-checkconf || fail "named-checkconf error — service tidak di-restart"
+named-checkconf || fail "named-checkconf error — resolver lama tidak diganggu, service tidak di-restart"
 named-checkzone -f raw "$ZONE_NAME" "${BINDDIR}/db.rpz.trustpositif.raw" \
-    || fail "zone RPZ tidak valid"
+    || fail "zone RPZ tidak valid — resolver lama tidak diganggu"
 
-echo "Konfigurasi valid. Menjalankan named..."
+echo "Konfigurasi valid."
+
+# Baru di titik ini resolver lama dimatikan — semua proses yang butuh DNS
+# (apt install, download blocklist) sudah selesai di atas. Kalau di-stop
+# lebih awal (sebelum apt-get update misalnya) dan /etc/resolv.conf masih
+# mengarah ke 127.0.0.1, apt akan gagal resolve deb.debian.org.
+echo "Menghentikan resolver lain (kalau ada) sebelum named naik..."
+for svc in unbound dnsmasq systemd-resolved; do
+    if systemctl is-active --quiet "$svc" 2>/dev/null; then
+        echo "Menemukan $svc aktif di port 53 — menghentikan."
+        systemctl stop "$svc"
+        systemctl disable "$svc" || true
+    fi
+done
+
+echo "Menjalankan named..."
 systemctl restart named
 systemctl enable named
 
