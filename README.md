@@ -36,7 +36,7 @@ resolver dengan blocking + redirect + update mingguan otomatis.
 2. Download dan jalankan sebagai root:
 
    ```bash
-   wget https://raw.githubusercontent.com/enrockss/bind9-to-komdigi-trustpositif/main/setup-bind9-rpz.sh
+   wget https://raw.githubusercontent.com/enrockss/bind9-to-komdigi-trustpositif/refs/heads/main/setup-bind9-rpz.sh
    chmod +x setup-bind9-rpz.sh
    nano setup-bind9-rpz.sh    # edit CLIENT_ACL dan BLOCK_TARGET dulu, lalu save
    sudo ./setup-bind9-rpz.sh
