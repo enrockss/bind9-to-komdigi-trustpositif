@@ -33,12 +33,18 @@ resolver dengan blocking + redirect + update mingguan otomatis.
 
    Nilai default di script ini cuma contoh — **wajib diganti** sebelum dijalankan.
 
-2. Jalankan sebagai root:
+2. Download dan jalankan sebagai root:
 
    ```bash
+   wget https://raw.githubusercontent.com/enrockss/bind9-to-komdigi-trustpositif/main/setup-bind9-rpz.sh
    chmod +x setup-bind9-rpz.sh
+   nano setup-bind9-rpz.sh    # edit CLIENT_ACL dan BLOCK_TARGET dulu, lalu save
    sudo ./setup-bind9-rpz.sh
    ```
+
+   Penting: pakai URL **raw** (`raw.githubusercontent.com`), bukan link
+   halaman file di GitHub (`github.com/.../blob/...`) — kalau salah, yang
+   kedownload adalah halaman HTML, bukan script-nya.
 
 3. Script berhenti otomatis di tahap mana pun kalau ada error (config invalid, zone gagal compile, dll) — aman ditinggal, tidak akan restart service dengan config rusak.
 
