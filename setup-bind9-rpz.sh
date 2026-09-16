@@ -16,7 +16,7 @@ set -euo pipefail
 # Subnet client yang boleh pakai resolver ini (allow-recursion).
 # WAJIB diganti. Jangan pakai "any" -> jadi open resolver, rawan
 # disalahgunakan untuk DNS amplification attack.
-CLIENT_ACL='192.168.0.0/24/24; 172.16.100.0/29; 127.0.0.1;'
+CLIENT_ACL='192.168.0.0/24; 172.16.100.0/29; 127.0.0.1;'
 
 # Domain tujuan redirect untuk domain yang diblokir.
 # WAJIB sudah punya A record valid di DNS publik sebelum script ini jalan.
