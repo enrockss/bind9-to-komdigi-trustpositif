@@ -16,11 +16,11 @@ set -euo pipefail
 # Subnet client yang boleh pakai resolver ini (allow-recursion).
 # WAJIB diganti. Jangan pakai "any" -> jadi open resolver, rawan
 # disalahgunakan untuk DNS amplification attack.
-CLIENT_ACL='192.168.0.0/24; 172.16.100.0/29; 127.0.0.1;'
+CLIENT_ACL='162.4.63.0/24; 172.16.100.0/29; 127.0.0.1;'
 
 # Domain tujuan redirect untuk domain yang diblokir.
 # WAJIB sudah punya A record valid di DNS publik sebelum script ini jalan.
-BLOCK_TARGET="blocked.custom.com."
+BLOCK_TARGET="blocked.rambowifi.com."
 
 # Sumber blocklist Komdigi
 SRC_URL="https://trustpositif.komdigi.go.id/assets/db/domains_isp"
@@ -42,6 +42,10 @@ ZONE_NAME="rpz.trustpositif"
 BINDDIR="/var/cache/bind"
 WORKDIR="${BINDDIR}/rpz-update"
 
+# File domains_isp yang WAJIB sudah di-download manual (lihat README) ke
+# direktori yang sama dengan script ini, sebelum script dijalankan.
+SEED_FILE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)/domains_isp"
+
 msg()  { echo -e "\n=== $1 ==="; }
 fail() { echo "GAGAL: $1" >&2; exit 1; }
 
@@ -49,6 +53,24 @@ fail() { echo "GAGAL: $1" >&2; exit 1; }
 
 # ---------- 1. Pre-flight check ----------
 msg "1/9 Pre-flight check"
+
+if [ ! -f "$SEED_FILE" ]; then
+    fail "file domains_isp tidak ditemukan di $SEED_FILE
+
+Download dulu sebelum menjalankan script ini:
+    wget https://trustpositif.komdigi.go.id/assets/db/domains_isp -O ${SEED_FILE}
+
+Baru jalankan ulang: sudo ./$(basename "$0")"
+fi
+
+SEED_SIZE=$(stat -c%s "$SEED_FILE")
+if [ "$SEED_SIZE" -lt 100000000 ]; then
+    fail "file $SEED_FILE cuma ${SEED_SIZE} byte — kemungkinan download terputus atau bukan file yang benar (harusnya ~200MB). Download ulang lalu coba lagi."
+fi
+if head -c 200 "$SEED_FILE" | grep -qi "<html"; then
+    fail "file $SEED_FILE berisi HTML, bukan domain list. Download ulang, cek URL-nya."
+fi
+echo "File domains_isp ditemukan: ${SEED_SIZE} byte, $(wc -l < "$SEED_FILE") baris"
 
 TARGET_HOST="${BLOCK_TARGET%.}"
 if ! getent hosts "$TARGET_HOST" >/dev/null 2>&1; then
@@ -67,6 +89,12 @@ if [ "$TOTAL_RAM_GB" -lt 12 ]; then
 fi
 
 # ---------- 2. Install paket ----------
+# Catatan: resolver lama (unbound/dnsmasq/systemd-resolved) SENGAJA belum
+# dimatikan di titik ini. apt-get butuh resolusi DNS untuk deb.debian.org,
+# dan kalau resolver dimatikan sekarang sementara /etc/resolv.conf masih
+# mengarah ke 127.0.0.1, apt akan gagal total. Resolver lama baru dimatikan
+# nanti tepat sebelum named dinyalakan (lihat step 8).
+msg "2/9 Install BIND9"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -102,10 +130,17 @@ log() { echo "\$(date '+%Y-%m-%d %H:%M:%S') \$1" >> "\$LOG"; }
 cd "\$WORKDIR"
 log "=== Mulai update RPZ ==="
 
-# 1. Download ke file temp
-if ! curl -sS -o domains_isp.new -L "\$SRC_URL"; then
-    log "GAGAL: curl error, update dibatalkan, zone lama tetap dipakai"
-    exit 1
+# 1. Download ke file temp — skip kalau file sudah ada (mis. dari seed file
+#    pertama kali, lihat setup-bind9-rpz.sh). Cron mingguan selalu mulai
+#    bersih (file .new di-rename ke .prev di akhir run), jadi ini tidak
+#    pernah membuat cron skip download beneran.
+if [ -f domains_isp.new ]; then
+    log "domains_isp.new sudah ada (pre-seeded), skip curl download"
+else
+    if ! curl -sS -o domains_isp.new -L "\$SRC_URL"; then
+        log "GAGAL: curl error, update dibatalkan, zone lama tetap dipakai"
+        exit 1
+    fi
 fi
 
 # 2. Sanity check
@@ -174,7 +209,11 @@ UPDATESCRIPT
 chmod +x "${WORKDIR}/update-rpz.sh"
 
 # ---------- 5. Generate zone pertama kali ----------
-msg "5/9 Download dan generate zone RPZ (butuh beberapa menit)"
+msg "5/9 Generate zone RPZ dari file yang sudah di-download (butuh beberapa menit)"
+
+# Pakai seed file yang sudah dicek di step 1 — bukan file asli yang
+# dipindah, supaya kalau perlu diulang, seed file masih ada.
+cp "$SEED_FILE" "${WORKDIR}/domains_isp.new"
 
 "${WORKDIR}/update-rpz.sh" || true
 
