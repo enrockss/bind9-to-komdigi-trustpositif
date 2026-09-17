@@ -33,10 +33,11 @@ resolver dengan blocking + redirect + update mingguan otomatis.
 
    Nilai default di script ini cuma contoh — **wajib diganti** sebelum dijalankan.
 
-2. Download dan jalankan sebagai root:
+2. Download blocklist `domains_isp` **ke direktori yang sama dengan script** sebelum dijalankan. Script tidak lagi download sendiri di tengah proses — sengaja dibuat begitu supaya kalau koneksi putus atau file korup, ketahuan di awal, bukan gagal di tengah instalasi:
 
    ```bash
    wget https://raw.githubusercontent.com/enrockss/bind9-to-komdigi-trustpositif/main/setup-bind9-rpz.sh
+   wget https://trustpositif.komdigi.go.id/assets/db/domains_isp
    chmod +x setup-bind9-rpz.sh
    nano setup-bind9-rpz.sh    # edit CLIENT_ACL dan BLOCK_TARGET dulu, lalu save
    sudo ./setup-bind9-rpz.sh
@@ -46,7 +47,14 @@ resolver dengan blocking + redirect + update mingguan otomatis.
    halaman file di GitHub (`github.com/.../blob/...`) — kalau salah, yang
    kedownload adalah halaman HTML, bukan script-nya.
 
-3. Script berhenti otomatis di tahap mana pun kalau ada error (config invalid, zone gagal compile, dll) — aman ditinggal, tidak akan restart service dengan config rusak.
+   File `domains_isp` ini cuma dipakai sekali untuk generate zone pertama
+   kali. Update mingguan berikutnya (via cron) tetap download versi
+   terbaru sendiri secara otomatis — file yang kamu download manual di
+   sini tidak dipakai ulang untuk update selanjutnya.
+
+3. Script akan berhenti di awal (sebelum apt install apa pun) kalau file `domains_isp` tidak ditemukan, ukurannya terlalu kecil, atau isinya bukan domain list — dengan pesan jelas apa yang perlu diperbaiki.
+
+4. Selain itu, script juga berhenti otomatis di tahap mana pun kalau ada error lain (config invalid, zone gagal compile, dll) — aman ditinggal, tidak akan restart service dengan config rusak.
 
 Waktu proses total sekitar 10-15 menit, tergantung kecepatan koneksi dan spek server.
 
